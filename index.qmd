@@ -1,0 +1,367 @@
+---
+title: "6 dot marker Vs 4 dot marker CT recorded timer"
+format: 
+  html:
+    toc: true
+    toc-location: right
+    smooth-scroll: true
+    code-fold: true
+    code-summary: "Show the code"
+execute:
+  cache: false
+warning: FALSE
+message: FALSE
+---
+
+4 dot Marker and 6 dot marker CT During imaging timer verification are calculate different time points and values taken Amplitute in mm vs time in sec.
+
+```{r warning=FALSE, message=FALSE}
+library(tidyverse)
+library(gtsummary)
+library(readxl)
+```
+
+## 4 dot marker
+
+```{r warning=FALSE, message=FALSE}
+
+final_4d_ct <- read_excel("6d vs 4d CT recorded timer_SM_for stats.xlsx", 
+    sheet = "FINAL_4d_CT IMAGING")
+
+marker_4d <- final_4d_ct |> select(`...2`, `5.0 Sec`, `4.5 Sec`, `4.0 Sec`,
+                                   `3.5 Sec`, `3.0 Sec`,`2.5 Sec`,`2.0 Sec`) |> 
+  rename(sample_position = `...2`,
+         m4d_5.0s = `5.0 Sec`, 
+         m4d_4.5s = `4.5 Sec`,
+         m4d_4.0s = `4.0 Sec`, 
+         m4d_3.5s = `3.5 Sec`,
+         m4d_3.0s = `3.0 Sec`,
+         m4d_2.5s = `2.5 Sec`, 
+         m4d_2.0s = `2.0 Sec`)
+```
+
+```{r}
+marker_4d_long <- marker_4d |> gather(
+  key = "marker_point", value = "marker_value", m4d_5.0s:m4d_2.0s) |> na.omit()
+
+ggplot(marker_4d_long,aes(x = sample_position, y = marker_value, 
+                          group =marker_point, colour = marker_point)) + 
+geom_line() + ggtitle("4 dot marker CT different time point")
+```
+
+## 4 dot marker Summary
+
+```{r}
+marker_4d_long |> select(-sample_position) |> 
+  tbl_summary(
+    by = marker_point,
+    type = all_continuous() ~ "continuous2",
+    statistic = list(all_continuous() ~ c("{min}, {max}", "{mean}","{sd}",
+                                          "{median}", "{p25}, {p75}"))
+  )
+```
+
+## 6 dot marker
+
+```{r}
+
+final_6d_ct <- read_excel("6d vs 4d CT recorded timer_SM_for stats.xlsx", 
+    sheet = "FINAL_6d_CT IMAGING")
+
+marker_6d <- final_6d_ct |> select(`...2`, `5.0 Sec`, `4.5 Sec`, `4.0 Sec`,
+                                   `3.5 Sec`, `3.0 Sec`,`2.5 Sec`,`2.0 Sec`) |> 
+  rename(sample_position = `...2`,
+         m6d_5.0s = `5.0 Sec`, 
+         m6d_4.5s = `4.5 Sec`,
+         m6d_4.0s = `4.0 Sec`, 
+         m6d_3.5s = `3.5 Sec`,
+         m6d_3.0s = `3.0 Sec`,
+         m6d_2.5s = `2.5 Sec`, 
+         m6d_2.0s = `2.0 Sec`)
+```
+
+```{r}
+marker_6d_long <- marker_6d |> gather(
+  key = "marker_point", value = "marker_value", m6d_5.0s:m6d_2.0s) |> na.omit()
+
+ggplot(marker_6d_long, aes(x = sample_position, y = marker_value, group = marker_point, 
+           colour = marker_point)) + 
+geom_line() + ggtitle("6 dot marker CT different time point")
+```
+
+## 6 dot marker Summary
+
+```{r}
+marker_6d_long |> select(-sample_position) |> 
+  tbl_summary(
+    by = marker_point,
+    type = all_continuous() ~ "continuous2",
+    statistic = list(all_continuous() ~ c("{min}, {max}", "{mean}","{sd}",
+                                          "{median}", "{p25}, {p75}"))
+  )
+```
+
+## 6 dot and 4 dot marker in 5.0 Sec
+
+```{r}
+marker_6d_4d_5s <- inner_join(
+  marker_6d |> select(sample_position, m6d_5.0s),
+  marker_4d |> select(sample_position, m4d_5.0s),
+  by = "sample_position") |> mutate(
+  m6d_5.0s_delta = c(NA, diff(m6d_5.0s)),
+  m4d_5.0s_delta = c(NA, diff(m4d_5.0s))
+  ) |> gather(
+    key = "marker_type", value = "marker_value", c(m6d_5.0s, m4d_5.0s)) |> 
+  gather(key = "marker_delta_type", value = "marker_delta_value", 
+         c(m6d_5.0s_delta, m4d_5.0s_delta))
+
+```
+
+```{r}
+marker_6d_4d_5s |> ggplot(aes(x=sample_position, y=marker_value, 
+                              group=marker_type, color=marker_type)) + 
+  geom_line() + ggtitle("6 dot and 4 dot marker")
+```
+
+```{r}
+marker_6d_4d_5s |> ggplot(aes(x=sample_position, y=marker_delta_value, 
+                              group=marker_delta_type, color=marker_delta_type)) + 
+  geom_line() + ggtitle("6 dot and 4 dot marker")
+```
+
+```{r}
+marker_6d_4d_5s |> select(marker_delta_type, marker_delta_value) |> 
+  tbl_summary(
+    by = marker_delta_type,
+    type = all_continuous() ~ "continuous2",
+    statistic = list(all_continuous() ~ c("{min}, {max}", "{mean}","{sd}",
+                                          "{median}", "{p25}, {p75}"))
+    
+  )
+```
+
+## Cross-correlation between 6d and 4d marker
+
+Cross-correlation is a mathematical and statistical technique used to measure the similarity or relationship between two time series or signals.
+
+**Null hypothesis:** that the patterns of the two graphs are the same (there is no time lag between them) we can perform a statistical hypothesis test. In this case, the null hypothesis is that the cross-correlation at all lags is not significantly different from zero.
+
+```{r}
+cross_correlation <- function(df1, col1, df2, col2, colname){
+  
+  df = inner_join(
+    df1 |> select(sample_position, {{col1}}),
+    df2 |> select(sample_position, {{col2}}),
+    by = "sample_position"
+    ) |> na.omit()
+  
+  crosscorr_result = ccf(df |> select({{col1}}), df |> select({{col2}}),
+      main = {{colname}},
+      xlab = "Lag", ylab = "Cross-Correlation"
+     )
+  # "Cross-Correlation Function between 4d and 6d marker", 
+  p_values <- 2 * (1 - pnorm(abs(crosscorr_result$acf)))
+  alpha <- 0.05
+  significant_lags <- which(p_values < alpha)
+
+  if (length(significant_lags) > 0) {
+    cat("Significant lags (indicating different patterns)
+        found at lags:",   significant_lags, "\n")
+  } else {
+    cat("No significant lags (indicating similar patterns) found.\n")
+  }
+  
+  result <- list(
+    crosscorr_result = crosscorr_result,
+    significant_lags = significant_lags
+  )
+  
+  return(result)
+}
+
+cross_correlation(marker_6d, m6d_5.0s, marker_4d, m4d_5.0s, "4d and 6d 5.0 sec")
+
+```
+
+## Overall 4 dot marker
+
+```{r}
+
+marker_4d |> mutate(
+  m4d_5.0s_lags = c(NA, diff(m4d_5.0s)),
+  m4d_4.5s_lags = c(NA, diff(m4d_4.5s)),
+  m4d_4.0s_lags = c(NA, diff(m4d_4.0s)),
+  m4d_3.5s_lags = c(NA, diff(m4d_3.5s)),
+  m4d_3.0s_lags = c(NA, diff(m4d_3.0s)),
+  m4d_2.5s_lags = c(NA, diff(m4d_2.5s)),
+  m4d_2.0s_lags = c(NA, diff(m4d_2.0s)),
+  ) -> marker_4d_df
+
+marker_4d_df |> select(sample_position, m4d_5.0s:m4d_2.0s) |> gather(
+  key = "marker_type", value = "marker_value", m4d_5.0s:m4d_2.0s) |> 
+  na.omit() -> marker_4d_df1
+
+marker_4d_df1 |> select(sample_position,marker_type, marker_value) |> 
+  ggplot(aes(x=sample_position, y=marker_value, group=marker_type,
+             color=marker_type)) + geom_line() + 
+  ggtitle("4 dot marker CT different time point") 
+
+
+marker_4d_df1 |> select(marker_type, marker_value) |> 
+  tbl_summary(
+    by = marker_type,
+    type = all_continuous() ~ "continuous2",
+    statistic = list(all_continuous() ~ c("{min}, {max}", "{mean}","{sd}",
+                                          "{median}", "{p25}, {p75}"))
+  )
+
+
+marker_4d_df |> select(sample_position, m4d_5.0s_lags:m4d_2.0s_lags) |> 
+  gather(key = "lags_marker_type", value = "lags_marker_value", 
+         m4d_5.0s_lags:m4d_2.0s_lags) |> na.omit() -> marker_4d_df2
+
+marker_4d_df2 |> select(sample_position, lags_marker_type, lags_marker_value) |> 
+  ggplot(aes(x=sample_position, y=lags_marker_value, group=lags_marker_type,
+             color=lags_marker_type)) + geom_line() + 
+  ggtitle("logs of 4 dot marker CT different time point")
+
+marker_4d_df2 |> select(lags_marker_type, lags_marker_value) |> 
+  tbl_summary(
+    by = lags_marker_type,
+    type = all_continuous() ~ "continuous2",
+    statistic = list(all_continuous() ~ c("{min}, {max}", "{mean}","{sd}",
+                                          "{median}", "{p25}, {p75}"))
+  )
+
+```
+
+## Overall 6 dot marker
+
+```{r}
+marker_6d |> mutate(
+  m6d_5.0s_lags = c(NA, diff(m6d_5.0s)),
+  m6d_4.5s_lags = c(NA, diff(m6d_4.5s)),
+  m6d_4.0s_lags = c(NA, diff(m6d_4.0s)),
+  m6d_3.5s_lags = c(NA, diff(m6d_3.5s)),
+  m6d_3.0s_lags = c(NA, diff(m6d_3.0s)),
+  m6d_2.5s_lags = c(NA, diff(m6d_2.5s)),
+  m6d_2.0s_lags = c(NA, diff(m6d_2.0s)),
+  ) -> marker_6d_df
+
+marker_6d_df |> select(sample_position, m6d_5.0s:m6d_2.0s) |> gather(
+  key = "marker_type", value = "marker_value", m6d_5.0s:m6d_2.0s) |> 
+  na.omit() -> marker_6d_df1
+
+marker_6d_df1 |> select(sample_position,marker_type, marker_value) |> 
+  ggplot(aes(x=sample_position, y=marker_value, group=marker_type,
+             color=marker_type)) + geom_line() + 
+  ggtitle("6 dot marker CT different time point") 
+
+marker_6d_df1 |> select(marker_type, marker_value) |> 
+  tbl_summary(
+    by = marker_type,
+    type = all_continuous() ~ "continuous2",
+    statistic = list(all_continuous() ~ c("{min}, {max}", "{mean}","{sd}",
+                                          "{median}", "{p25}, {p75}"))
+  )
+
+
+marker_6d_df |> select(sample_position, m6d_5.0s_lags:m6d_2.0s_lags) |> 
+  gather(key = "lags_marker_type", value = "lags_marker_value", 
+         m6d_5.0s_lags:m6d_2.0s_lags) |> na.omit() -> marker_6d_df2
+
+marker_6d_df2 |> select(sample_position, lags_marker_type, lags_marker_value) |> 
+  ggplot(aes(x=sample_position, y=lags_marker_value, group=lags_marker_type,
+             color=lags_marker_type)) + geom_line() + 
+  ggtitle("logs of 6 dot marker CT different time point")
+
+
+marker_6d_df2 |> select(lags_marker_type, lags_marker_value) |> 
+  tbl_summary(
+    by = lags_marker_type,
+    type = all_continuous() ~ "continuous2",
+    statistic = list(all_continuous() ~ c("{min}, {max}", "{mean}","{sd}",
+                                          "{median}", "{p25}, {p75}"))
+  )
+
+
+```
+
+## Deltas between consecutive values of 6d and 4d marker each time point
+
+```{r}
+
+marker_4d_6d <- rbind(marker_4d_df2, marker_6d_df2)
+marker_4d_6d |> mutate(
+  type = case_when(
+    grepl("d_2.0", lags_marker_type) ~ "2.0 sec",
+    grepl("d_2.5", lags_marker_type) ~ "2.5 sec",
+    grepl("d_3.0", lags_marker_type) ~ "3.0 sec",
+    grepl("d_3.5", lags_marker_type) ~ "3.5 sec",
+    grepl("d_4.0", lags_marker_type) ~ "4.0 sec",
+    grepl("d_4.5", lags_marker_type) ~ "4.5 sec",
+    grepl("d_5.0", lags_marker_type) ~ "5.0 sec"
+  )
+) |> ggplot(aes(x=sample_position,y=lags_marker_value,
+                group=lags_marker_type,color=lags_marker_type)) + 
+  geom_line() + facet_wrap(~type)
+```
+
+## Cross Correlation
+
+```{r}
+cross_correlation(marker_6d, m6d_5.0s, marker_4d, m4d_5.0s, "4d and 6d 5.0 sec")
+cross_correlation(marker_6d, m6d_4.5s, marker_4d, m4d_4.5s, "4d and 6d 4.5 sec")
+cross_correlation(marker_6d, m6d_4.0s, marker_4d, m4d_4.0s, "4d and 6d 4.0 sec")
+cross_correlation(marker_6d, m6d_3.5s, marker_4d, m4d_3.5s, "4d and 6d 3.5 sec")
+cross_correlation(marker_6d, m6d_3.0s, marker_4d, m4d_3.0s, "4d and 6d 3.0 sec")
+cross_correlation(marker_6d, m6d_2.5s, marker_4d, m4d_2.5s, "4d and 6d 2.5 sec")
+cross_correlation(marker_6d, m6d_2.0s, marker_4d, m4d_2.0s, "4d and 6d 2.0 sec")
+```
+
+```{r}
+
+marker_analysis <- function(df1, col1, df2, col2) {
+  marker_6d_4d_s <- inner_join(
+    df1 %>% select(sample_position, {{col1}}),
+    df2 %>% select(sample_position, {{col2}}),
+    by = "sample_position") %>%
+    na.omit() %>%
+    mutate(
+      !!paste0(col1, "_delta") := c(NA, diff(!!sym(col1))),
+      !!paste0(col2, "_delta") := c(NA, diff(!!sym(col2)))
+    ) %>%
+    gather(key = "marker_type", value = "marker_value", c({{col1}}, {{col2}})) %>%
+    gather(key = "marker_delta_type", value = "marker_delta_value",
+           c(!!sym(paste0(col1, "_delta")), !!sym(paste0(col2, "_delta"))))
+  
+  plot1 <- marker_6d_4d_s %>% 
+    ggplot(aes(x = sample_position, y = marker_value, 
+               group = marker_type, color = marker_type)) + geom_line() + 
+    ggtitle("6 dot and 4 dot marker")
+  
+  plot2 <- marker_6d_4d_s %>% 
+    ggplot(aes(x = sample_position, y = marker_delta_value, 
+               group = marker_delta_type, color = marker_delta_type)) + 
+    geom_line() +ggtitle("6 dot and 4 dot marker")
+  
+  summary_tab <- marker_6d_4d_s %>% 
+    select(marker_delta_type, marker_delta_value) %>%
+    tbl_summary(
+      by = marker_delta_type,
+      type = all_continuous() ~ "continuous2",
+      statistic = all_continuous() ~ c("{min}-{max}", "{mean}", "{sd}", 
+      "{median}", "{p25} {p75}")
+    )
+  cc <- cross_correlation(df1, {{col1}}, df2, {{col2}})
+
+  return(setNames(list(marker_6d_4d_s, plot1, plot2, summary_tab, cc), 
+                  c("data", "plot1", "plot2", "summary", "cross_correlation")))
+
+}
+
+# # Calling the function
+# kk = marker_analysis(marker_6d, "m6d_4.0s", marker_4d, "m4d_4.0s")
+# kk$summary
+
+```
